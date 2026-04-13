@@ -26,13 +26,46 @@ def train_one_epoch(model, optimizer, scaler, data_loader, device, epoch, args):
         warmup_iters = args.warmup_epochs*len(data_loader)
         lr_scheduler = utils.warmup_lr_scheduler(optimizer, start_iter, warmup_iters, args.warmup_factor)
 
+    # Track consecutive NaN batches: too many in a row means weights are corrupted
+    consecutive_nan = 0
+    max_consecutive_nan = 10
+
     for images, targets in metric_logger.log_every(data_loader, args.print_freq, header):
         images = list(image.to(device) for image in images)
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
+        # Clear gradients at the top of the loop before the forward pass
+        optimizer.zero_grad()
 
         with torch.cuda.amp.autocast(enabled=args.amp):
-            loss_dict = model(images, targets)
+            # Safety net: filter any labels that would overflow the classification head.
+            # With num_classes=265 this should be a no-op for valid OpenImages data, but
+            # keeps us safe against any stray annotation with label >= 265.
+            max_class_id = model.module.head.classification_head.num_classes if hasattr(model, 'module') else model.head.classification_head.num_classes
+
+            valid_images = []
+            valid_targets = []
+
+            for img, tgt in zip(images, targets):
+                valid_idx = tgt["labels"] < max_class_id
+
+                if valid_idx.any():
+                    cleaned_tgt = {}
+                    for k, v in tgt.items():
+                        if isinstance(v, torch.Tensor) and v.shape[0] == tgt["labels"].shape[0]:
+                            cleaned_tgt[k] = v[valid_idx]
+                        else:
+                            cleaned_tgt[k] = v
+
+                    valid_images.append(img)
+                    valid_targets.append(cleaned_tgt)
+
+            if len(valid_targets) == 0:
+                if lr_scheduler is not None:
+                    lr_scheduler.step()
+                continue
+
+            loss_dict = model(valid_images, valid_targets)
             losses = sum(loss for loss in loss_dict.values())
 
         # reduce losses over all GPUs for logging purposes
@@ -42,14 +75,26 @@ def train_one_epoch(model, optimizer, scaler, data_loader, device, epoch, args):
         loss_value = losses_reduced.item()
 
         if not math.isfinite(loss_value):
-            print("Loss is {}, stopping training".format(loss_value))
+            consecutive_nan += 1
+            print("WARNING: Loss is {} (NaN batch {}/{}), skipping update".format(
+                loss_value, consecutive_nan, max_consecutive_nan))
             print(loss_dict_reduced)
-            sys.exit(1)
+            if consecutive_nan >= max_consecutive_nan:
+                print("Too many consecutive NaN batches — model weights likely corrupted, stopping.")
+                sys.exit(1)
+            # Skip backward/step for this batch; still advance lr_scheduler
+            if lr_scheduler is not None:
+                lr_scheduler.step()
+            continue
+
+        consecutive_nan = 0  # reset on any successful batch
 
         scaler.scale(losses).backward()
+        # Unscale before clipping so clip_grad_norm_ operates in true gradient space
+        scaler.unscale_(optimizer)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         scaler.step(optimizer)
         scaler.update()
-        optimizer.zero_grad()
 
         if lr_scheduler is not None:
             lr_scheduler.step()
