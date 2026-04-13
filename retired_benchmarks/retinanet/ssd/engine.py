@@ -79,6 +79,7 @@ def train_one_epoch(model, optimizer, scaler, data_loader, device, epoch, args):
             print("WARNING: Loss is {} (NaN batch {}/{}), skipping update".format(
                 loss_value, consecutive_nan, max_consecutive_nan))
             print(loss_dict_reduced)
+            del losses, loss_dict
             if consecutive_nan >= max_consecutive_nan:
                 print("Too many consecutive NaN batches — model weights likely corrupted, stopping.")
                 sys.exit(1)
