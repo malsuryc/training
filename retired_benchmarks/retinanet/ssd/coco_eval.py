@@ -6,7 +6,6 @@ from contextlib import redirect_stdout
 
 import numpy as np
 import torch
-import torch._six
 
 from pycocotools.cocoeval import COCOeval
 from pycocotools.coco import COCO
