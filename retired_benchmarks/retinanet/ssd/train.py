@@ -28,7 +28,7 @@ def get_dataset_fn(name):
     paths = {
         "coco": (get_coco, 91),
         "openimages": (get_openimages, 601),            # Full openimages dataset
-        "openimages-mlperf": (get_openimages, 264),     # L0 classes with more than 1000 samples
+        "openimages-mlperf": (get_openimages, 265),     # L0 classes (1-indexed labels 1-264, so capacity must be 265)
     }
     return paths[name]
 
