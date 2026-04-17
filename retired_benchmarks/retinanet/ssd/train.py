@@ -88,6 +88,10 @@ def parse_args(add_help=True):
                         help='how long the learning rate will be warmed up in fraction of epochs')
     parser.add_argument('--warmup-factor', default=1e-3, type=float,
                         help='factor for controlling warmup curve')
+    parser.add_argument('--lr-step-milestones', default=None, nargs='+', type=int,
+                        help='Epochs at which to decay the LR by --lr-step-gamma (e.g. 16 22)')
+    parser.add_argument('--lr-step-gamma', default=0.1, type=float,
+                        help='Multiplicative factor for MultiStepLR decay (default: 0.1)')
 
     # Other
     parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
@@ -177,6 +181,12 @@ def main(args):
     mllogger.event(key=OPT_LR_WARMUP_FACTOR, value=args.warmup_factor)
     mllogger.event(key=GRADIENT_ACCUMULATION_STEPS, value=1)
 
+    # Epoch-level LR decay (applied after warmup completes)
+    lr_scheduler_epoch = None
+    if args.lr_step_milestones:
+        lr_scheduler_epoch = torch.optim.lr_scheduler.MultiStepLR(
+            optimizer, milestones=args.lr_step_milestones, gamma=args.lr_step_gamma)
+
     if args.resume:
         checkpoint = torch.load(args.resume, map_location='cpu')
         model_without_ddp.load_state_dict(checkpoint['model'])
@@ -233,6 +243,8 @@ def main(args):
             if args.distributed:
                 train_sampler.set_epoch(epoch)
             train_one_epoch(model, optimizer, scaler, data_loader, device, epoch, args)
+            if lr_scheduler_epoch is not None:
+                lr_scheduler_epoch.step()
             if args.output_dir:
                 checkpoint = {
                     'model': model_without_ddp.state_dict(),
