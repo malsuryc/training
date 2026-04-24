@@ -8,6 +8,7 @@ import numpy as np
 import torch
 import torch.utils.data
 import torchvision
+import wandb
 
 from ssd_logger import mllogger
 from mlperf_logging.mllog.constants import (SUBMISSION_BENCHMARK, SUBMISSION_DIVISION, SUBMISSION_STATUS,
@@ -108,6 +109,14 @@ def parse_args(add_help=True):
                         help='number of distributed processes')
     parser.add_argument('--dist-url', default='env://', help='url used to set up distributed training')
 
+    # W&B sweep integration
+    parser.add_argument('--wandb', action='store_true', default=False,
+                        help='Enable Weights & Biases logging')
+    parser.add_argument('--wandb-project', default='mlperf-retinanet',
+                        help='W&B project name')
+    parser.add_argument('--wandb-entity', default=None,
+                        help='W&B entity (team or username)')
+
     args = parser.parse_args()
 
     args.eval_batch_size = args.eval_batch_size or args.batch_size
@@ -119,6 +128,39 @@ def parse_args(add_help=True):
 def main(args):
     # Init distributed mode
     utils.init_distributed_mode(args)
+
+    # W&B init — rank 0 only to avoid duplicate runs from each GPU process
+    if args.wandb and utils.is_main_process():
+        wandb.init(
+            project=args.wandb_project,
+            entity=args.wandb_entity,
+            config={
+                "lr": args.lr,
+                "batch_size": args.batch_size,
+                "epochs": args.epochs,
+                "warmup_epochs": args.warmup_epochs,
+                "warmup_factor": args.warmup_factor,
+                "lr_step_milestones": args.lr_step_milestones,
+                "lr_step_gamma": args.lr_step_gamma,
+                "backbone": args.backbone,
+                "image_size": args.image_size,
+                "dataset": args.dataset,
+                "amp": args.amp,
+                "num_gpus": utils.get_world_size(),
+                "seed": args.seed,
+            },
+        )
+        # When launched by a sweep agent, wandb.config contains the sampled
+        # hyperparameters. Override args so the rest of the code picks them up.
+        wc = dict(wandb.config)
+        if "lr" in wc:
+            args.lr = wc["lr"]
+        if "batch_size" in wc:
+            args.batch_size = int(wc["batch_size"])
+        if "warmup_epochs" in wc:
+            args.warmup_epochs = int(wc["warmup_epochs"])
+        if "lr_step_gamma" in wc:
+            args.lr_step_gamma = wc["lr_step_gamma"]
 
     # Start MLPerf benchmark
     mllogger.event(key=SUBMISSION_BENCHMARK, value=SSD)
@@ -262,6 +304,11 @@ def main(args):
             # evaluate after every epoch
             coco_evaluator = evaluate(model, data_loader_test, device=device, epoch=epoch+1, args=args)
             accuracy = coco_evaluator.get_stats()['bbox'][0]
+
+            # W&B: log eval metrics (rank 0 only)
+            if args.wandb and utils.is_main_process():
+                wandb.log({"epoch": epoch + 1, "eval/mAP": accuracy})
+
             if args.target_map and accuracy >= args.target_map:
                 status = SUCCESS
                 break
@@ -271,6 +318,11 @@ def main(args):
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str))
     mllogger.event(key=STATUS, value=status, log_rank=True)
+
+    # W&B: finalize (rank 0 only)
+    if args.wandb and utils.is_main_process():
+        wandb.log({"final/status": status, "final/wall_time_s": total_time})
+        wandb.finish()
 
 
 if __name__ == "__main__":

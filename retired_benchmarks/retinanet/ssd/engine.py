@@ -2,6 +2,7 @@ import math
 import sys
 import time
 import torch
+import wandb
 
 from ssd_logger import mllogger
 from mlperf_logging.mllog.constants import (EPOCH_START, EPOCH_STOP, EVAL_START, EVAL_STOP, EVAL_ACCURACY)
@@ -104,6 +105,18 @@ def train_one_epoch(model, optimizer, scaler, data_loader, device, epoch, args):
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
 
     mllogger.end(key=EPOCH_STOP, value=epoch, metadata={"epoch_num": epoch}, sync=True)
+
+    # W&B: log train metrics (rank 0 only)
+    if getattr(args, 'wandb', False) and utils.is_main_process():
+        log_data = {"epoch": epoch, "train/lr": optimizer.param_groups[0]["lr"]}
+        if 'loss' in metric_logger.meters:
+            log_data["train/loss"] = metric_logger.meters['loss'].global_avg
+        if 'classification' in metric_logger.meters:
+            log_data["train/cls_loss"] = metric_logger.meters['classification'].global_avg
+        if 'bbox_regression' in metric_logger.meters:
+            log_data["train/box_loss"] = metric_logger.meters['bbox_regression'].global_avg
+        wandb.log(log_data)
+
     return metric_logger
 
 
