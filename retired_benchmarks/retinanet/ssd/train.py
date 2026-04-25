@@ -78,20 +78,20 @@ def parse_args(add_help=True):
                         help="Use pre-trained models from the modelzoo")
 
     # Hyperparameters
-    parser.add_argument('-b', '--batch-size', default=2, type=int,
+    parser.add_argument('-b', '--batch-size', '--batch_size', default=2, type=int,
                         help='images per gpu, the total batch size is $NGPU x batch_size')
     parser.add_argument('-e', '--eval-batch-size', default=None, type=int,
                         help='evaluation images per gpu, the total batch size is $NGPU x batch_size')
     parser.add_argument('--lr', default=0.0001, type=float,
                         help='initial learning rate, 0.02 is the default value for training '
                              'on 8 gpus and 2 images_per_gpu')
-    parser.add_argument('--warmup-epochs', default=1, type=int,
+    parser.add_argument('--warmup-epochs', '--warmup_epochs', default=1, type=int,
                         help='how long the learning rate will be warmed up in fraction of epochs')
     parser.add_argument('--warmup-factor', default=1e-3, type=float,
                         help='factor for controlling warmup curve')
     parser.add_argument('--lr-step-milestones', default=None, nargs='+', type=int,
                         help='Epochs at which to decay the LR by --lr-step-gamma (e.g. 16 22)')
-    parser.add_argument('--lr-step-gamma', default=0.1, type=float,
+    parser.add_argument('--lr-step-gamma', '--lr_step_gamma', default=0.1, type=float,
                         help='Multiplicative factor for MultiStepLR decay (default: 0.1)')
 
     # Other
