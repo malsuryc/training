@@ -48,3 +48,5 @@ nogit/
 TODO
 *.log
 
+# Wandb
+wandb/
