@@ -136,7 +136,7 @@ class MLPerfCallback(TrainerCallback):
         self.mllogger.event(key=constants.SEED, value=args.seed)
         self.mllogger.event(key=constants.OPT_LR_WARMUP_FACTOR, value=args.warmup_ratio)
         self.mllogger.event(key=constants.OPT_LR_TRAINING_STEPS, value=args.max_steps)
-        self.mllogger.event(key=constants.OPT_ADAMW_WEIGHT_DECAY, value=args.weight_decay)
+        self.mllogger.event(key=constants.OPT_WEIGHT_DECAY, value=args.weight_decay)
         self.mllogger.event(key=constants.OPT_GRADIENT_CLIP_NORM, value=args.max_grad_norm)
         self.mllogger.event(key=constants.OPT_BASE_LR, value=args.learning_rate)
         self.mllogger.event(key=constants.LORA_ALPHA, value=self.submission_info["lora_alpha"])
