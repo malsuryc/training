@@ -139,7 +139,7 @@ class MLPerfCallback(TrainerCallback):
         self.mllogger.event(key=constants.OPT_WEIGHT_DECAY, value=args.weight_decay)
         self.mllogger.event(key=constants.OPT_GRADIENT_CLIP_NORM, value=args.max_grad_norm)
         self.mllogger.event(key=constants.OPT_BASE_LR, value=args.learning_rate)
-        self.mllogger.event(key=constants.LORA_ALPHA, value=self.submission_info["lora_alpha"])
+        self.mllogger.event(key=getattr(constants, "LORA_ALPHA", "lora_alpha"), value=self.submission_info["lora_alpha"])
         self.mllogger.event(key='lora_rank', value=16)
         self.mllogger.event(key=constants.GRADIENT_ACCUMULATION_STEPS, value=args.gradient_accumulation_steps)
         self.mllogger.start(key=constants.INIT_START, value="")
